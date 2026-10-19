@@ -1,4 +1,7 @@
 streamlit
 supabase
+requests
+feedparser
 nepali-datetime
 jpholiday
+openai
