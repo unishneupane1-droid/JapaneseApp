@@ -28,7 +28,7 @@ except ImportError:
 # 1. APP CONFIGURATION / SUPABASE
 # --------------------------------------------------
 st.set_page_config(
-    page_title="Japanese - Nepali App",
+    page_title="Japanese Nepali Learning Hub",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -54,8 +54,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📚 Japanese - Nepali App")
-st.caption("जापानी शब्दकोश • नोट • क्यालेन्डर • काञ्जी अभ्यास • समाचार • कागजात")
+st.title("📚 Japanese Nepali Learning Hub")
+st.caption("Dictionary • Notes • Calendar • JLPT N3 • Currency • News • Documents • AI Assistant")
 
 @st.cache_resource
 def get_supabase():
@@ -176,9 +176,9 @@ def get_bs_date(gregorian_date):
 # --------------------------------------------------
 # 3. MAIN SECTIONS
 # --------------------------------------------------
-words_tab, notes_tab, calendar_tab, kanji_tab, currency_tab, news_tab, docs_tab, ai_tab = st.tabs([
-    "📖 शब्दकोश", "📝 मेरा नोट", "📅 क्यालेन्डर", "🈶 N3 काञ्जी",
-    "💱 Currency", "📰 समाचार", "📎 My Documents", "🤖 AI सहायक"
+words_tab, notes_tab, calendar_tab, kanji_tab, currency_tab, news_tab, docs_tab, ai_tab, private_tab = st.tabs([
+    "📖 Dictionary", "📝 My Notes", "📅 Calendar", "🈶 JLPT N3",
+    "💱 Currency Converter", "📰 News", "📎 My Documents", "🤖 AI Assistant", "🔒 Private Folder"
 ])
 
 
@@ -319,7 +319,7 @@ with words_tab:
 # 5. NOTES (existing notes table preserved; larger editor)
 # --------------------------------------------------
 with notes_tab:
-    st.header("📝 मेरा नोटहरू")
+    st.header("📝 My Notes")
     st.caption("ठूला अक्षरमा लेख, खोज, सच्याऊ र सुरक्षित गर।")
     note_search = st.text_input("🔎 पुराना नोट खोज", key="note_search")
     with st.form("add_note_form"):
@@ -340,6 +340,7 @@ with notes_tab:
     st.divider()
     try:
         all_notes = sb.table("notes").select("*").eq("user_id", user_id).order("created_at", desc=True).execute().data or []
+        all_notes = [n for n in all_notes if not str(n.get("title", "")).startswith("[PRIVATE] ")]
         if note_search.strip():
             s = note_search.strip().casefold()
             all_notes = [n for n in all_notes if s in str(n.get("title", "")).casefold() or s in str(n.get("content", "")).casefold()]
@@ -376,7 +377,7 @@ with notes_tab:
 # 6. CALENDAR: Nepali / English / Japanese month names
 # --------------------------------------------------
 with calendar_tab:
-    st.header("📅 मासिक क्यालेन्डर / Monthly Calendar / 月間カレンダー")
+    st.header("📅 Monthly Calendar / 月間カレンダー")
     today = date.today()
     this_month = today.replace(day=1)
     if "calendar_month" not in st.session_state:
@@ -468,7 +469,7 @@ with calendar_tab:
 # 7. JLPT N3 KANJI / WORKSHEET
 # --------------------------------------------------
 with kanji_tab:
-    st.header("🈶 JLPT N3 काञ्जी अभ्यास")
+    st.header("🈶 JLPT N3 Kanji Practice")
     st.caption("आफ्नो N3 शब्द/काञ्जी थपेर worksheet बनाऊ। उदाहरणहरू अभ्यासका लागि हुन्, पूर्ण आधिकारिक प्रश्नपत्र होइनन्.")
     n3_seed = [
         ("経験", "けいけん", "अनुभव"),
@@ -587,7 +588,7 @@ with news_tab:
 # 10. DOCUMENTS: persistent Supabase Storage upload/list/download
 # --------------------------------------------------
 with docs_tab:
-    st.header("📎 मेरा Documents / कागजात")
+    st.header("📎 My Documents")
     st.write("PDF, DOCX, TXT, Excel, CSV र फोटोहरू आफ्नो account मा cloud मा सुरक्षित राख्न सकिन्छ।")
     st.caption("पहिलो पटक Supabase Storage मा `user-documents` नामको **Private** bucket बनाउनुपर्छ। तलका upload/list सुविधाले त्यही bucket प्रयोग गर्छन्।")
     bucket_name = "user-documents"
@@ -645,7 +646,7 @@ with docs_tab:
 # 11. AI ASSISTANT (requires OpenAI API key in Streamlit secrets)
 # --------------------------------------------------
 with ai_tab:
-    st.header("🤖 AI सहायक")
+    st.header("🤖 AI Assistant")
     st.write("Japanese grammar, N3 Kanji, Nepali meaning, translation, worksheet र सामान्य प्रश्न सोध्न सकिन्छ।")
     st.caption("यो सुविधा चलाउन Streamlit Secrets मा OPENAI_API_KEY राखिएको हुनुपर्छ।")
     prompt = st.text_area("आफ्नो प्रश्न लेख", height=180, placeholder="例：経験（けいけん）の नेपाली अर्थ र एउटा उदाहरण देऊ।")
@@ -674,8 +675,98 @@ with ai_tab:
                 st.caption(str(e))
 
 
+
+# --------------------------------------------------
+# 12. PIN-LOCKED PRIVATE FOLDER (personal notes only)
+# --------------------------------------------------
+with private_tab:
+    st.header("🔒 Private Folder")
+    st.write("This folder is for your personal notes. Set the PIN in Streamlit Cloud Secrets.")
+    st.caption("For safety, adult/pornographic website links are not included. This folder stores private notes in your signed-in account.")
+
+    private_pin = st.secrets.get("PRIVATE_FOLDER_PIN", "")
+    if not private_pin:
+        st.warning('To enable this folder, add PRIVATE_FOLDER_PIN = "9828" in Streamlit Cloud → App settings → Secrets.')
+    else:
+        if "private_folder_unlocked" not in st.session_state:
+            st.session_state.private_folder_unlocked = False
+        if not st.session_state.private_folder_unlocked:
+            with st.form("private_folder_unlock_form"):
+                entered_pin = st.text_input("Enter folder PIN", type="password")
+                unlock = st.form_submit_button("Unlock Private Folder", use_container_width=True)
+            if unlock:
+                if entered_pin == str(private_pin):
+                    st.session_state.private_folder_unlocked = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect PIN. Try again.")
+        else:
+            if st.button("🔐 Lock folder", use_container_width=False):
+                st.session_state.private_folder_unlocked = False
+                st.rerun()
+
+            st.subheader("Add a private note")
+            with st.form("private_note_add_form"):
+                private_title = st.text_input("Title", placeholder="Private study note")
+                private_content = st.text_area("Private note", height=360, placeholder="Write your private note here...")
+                save_private = st.form_submit_button("Save Private Note", use_container_width=True)
+            if save_private:
+                if not private_title.strip() or not private_content.strip():
+                    st.warning("Enter both a title and note.")
+                else:
+                    try:
+                        sb.table("notes").insert({
+                            "user_id": user_id,
+                            "title": "[PRIVATE] " + private_title.strip(),
+                            "content": private_content.strip()
+                        }).execute()
+                        st.success("Private note saved.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not save the private note. Check the Supabase notes table.")
+                        st.caption(str(e))
+
+            st.divider()
+            st.subheader("Saved private notes")
+            try:
+                private_notes = sb.table("notes").select("*").eq("user_id", user_id).order("created_at", desc=True).execute().data or []
+                private_notes = [n for n in private_notes if str(n.get("title", "")).startswith("[PRIVATE] ")]
+                if not private_notes:
+                    st.info("No private notes saved yet.")
+                for note in private_notes:
+                    note_id = note.get("id")
+                    shown_title = str(note.get("title", "[PRIVATE] Note"))[10:]
+                    with st.expander("🔒 " + shown_title):
+                        with st.form(f"private_note_edit_{note_id}"):
+                            edit_title = st.text_input("Title", value=shown_title, key=f"private_title_{note_id}")
+                            edit_content = st.text_area("Private note", value=note.get("content", ""), height=360, key=f"private_content_{note_id}")
+                            save_edit = st.form_submit_button("Update Private Note")
+                        if save_edit:
+                            try:
+                                sb.table("notes").update({
+                                    "title": "[PRIVATE] " + edit_title.strip(),
+                                    "content": edit_content.strip()
+                                }).eq("id", note_id).eq("user_id", user_id).execute()
+                                st.success("Private note updated.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Could not update the private note.")
+                                st.caption(str(e))
+                        confirm_delete = st.checkbox("Delete this private note", key=f"private_delete_confirm_{note_id}")
+                        if st.button("Delete Private Note", key=f"private_delete_{note_id}", disabled=not confirm_delete):
+                            try:
+                                sb.table("notes").delete().eq("id", note_id).eq("user_id", user_id).execute()
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Could not delete the private note.")
+                                st.caption(str(e))
+            except Exception as e:
+                st.error("Could not load private notes. Check the Supabase notes table and user-level permissions.")
+                st.caption(str(e))
+
+
 # --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
 st.divider()
-st.caption("Japanese - Nepali App | Login गरेपछि आफ्नै account को data मात्र देखाइन्छ।")
+st.caption("Japanese Nepali Learning Hub | Your account shows your own data after login.")
