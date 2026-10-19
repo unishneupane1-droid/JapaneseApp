@@ -1,0 +1,2 @@
+# JapaneseApp
+Japanese Nepali Dictionary
