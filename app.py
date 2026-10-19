@@ -1,6 +1,7 @@
 import streamlit as st
 from supabase import create_client
 from datetime import date, timedelta
+import calendar
 
 # Optional calendar libraries
 try:
@@ -248,7 +249,7 @@ with words_tab:
                             "user_id": user_id,
                             "japanese": japanese.strip(),
                             "hiragana": hiragana.strip(),
-                            "meaning": meaning.strip()
+                            "meaning_ne": meaning.strip()
                         }).execute()
 
                         st.success("शब्द सुरक्षित भयो!")
@@ -336,7 +337,7 @@ with words_tab:
                                 "user_id": user_id,
                                 "japanese": jp,
                                 "hiragana": hira,
-                                "meaning": nepali_meaning
+                                "meaning_ne": nepali_meaning
                             }).execute()
                             added += 1
 
@@ -386,7 +387,7 @@ with words_tab:
                 word for word in all_words
                 if search_lower in str(word.get("japanese", "")).casefold()
                 or search_lower in str(word.get("hiragana", "")).casefold()
-                or search_lower in str(word.get("meaning", "")).casefold()
+                or search_lower in str(word.get("meaning_ne", word.get("meaning", ""))).casefold()
             ]
         else:
             filtered_words = all_words
@@ -404,7 +405,7 @@ with words_tab:
 
             jp = word.get("japanese", "")
             hira = word.get("hiragana", "")
-            nepali_meaning = word.get("meaning", "")
+            nepali_meaning = word.get("meaning_ne", word.get("meaning", ""))
 
             with st.expander(
                 f"📘 {jp} — {nepali_meaning}"
@@ -446,7 +447,7 @@ with words_tab:
                             sb.table("words").update({
                                 "japanese": edited_jp.strip(),
                                 "hiragana": edited_hira.strip(),
-                                "meaning": edited_meaning.strip()
+                                "meaning_ne": edited_meaning.strip()
                             }).eq(
                                 "id", word_id
                             ).eq(
@@ -633,91 +634,129 @@ with notes_tab:
 
 
 # --------------------------------------------------
-# 7. CALENDAR
+# 7. MONTHLY CALENDAR (AUTO-UPDATES EACH MONTH/YEAR)
 # --------------------------------------------------
 
 with calendar_tab:
-    st.header("📅 क्यालेन्डर")
+    st.header("📅 मासिक क्यालेन्डर")
+    st.caption(
+        "महिना परिवर्तन गर्न अगाडि/पछाडि थिच। नयाँ महिना र वर्ष "
+        "आजको मितिअनुसार स्वतः सुरु हुन्छ।"
+    )
 
     today = date.today()
 
-    st.write(f"**आजको English Date:** {today.strftime('%Y-%m-%d')}")
+    # New session starts at the current month. Month navigation is kept
+    # in session state while the app is open.
+    this_real_month = today.replace(day=1)
+    if (
+        "calendar_month" not in st.session_state
+        or st.session_state.get("calendar_system_month") != this_real_month
+    ):
+        # Reset to the real current month when the calendar crosses into
+        # a new month/year, without interrupting navigation within a month.
+        st.session_state.calendar_month = this_real_month
+        st.session_state.calendar_system_month = this_real_month
+
+    current_month = st.session_state.calendar_month
+
+    def previous_month():
+        current = st.session_state.calendar_month
+        if current.month == 1:
+            st.session_state.calendar_month = date(current.year - 1, 12, 1)
+        else:
+            st.session_state.calendar_month = date(current.year, current.month - 1, 1)
+
+    def next_month():
+        current = st.session_state.calendar_month
+        if current.month == 12:
+            st.session_state.calendar_month = date(current.year + 1, 1, 1)
+        else:
+            st.session_state.calendar_month = date(current.year, current.month + 1, 1)
+
+    nav_left, nav_title, nav_right, nav_today = st.columns([1, 3, 1, 1])
+    with nav_left:
+        st.button("⬅️ अघिल्लो", on_click=previous_month, use_container_width=True)
+    with nav_title:
+        st.subheader(st.session_state.calendar_month.strftime("%B %Y"))
+    with nav_right:
+        st.button("अर्को ➡️", on_click=next_month, use_container_width=True)
+    with nav_today:
+        if st.button("आज", use_container_width=True):
+            st.session_state.calendar_month = today.replace(day=1)
+            st.rerun()
+
+    shown_month = st.session_state.calendar_month
+
+    st.write(f"**आजको English date:** {today.strftime('%A, %Y-%m-%d')}")
 
     if nepali_datetime is not None:
         try:
             bs_today = nepali_datetime.date.today()
-
             st.write(
                 f"**आजको नेपाली मिति:** "
-                f"{bs_today.year}/{bs_today.month}/{bs_today.day}"
+                f"{bs_today.year}/{bs_today.month:02d}/{bs_today.day:02d}"
             )
-
         except Exception:
-            st.info(
-                "नेपाली मिति देखाउन समस्या भयो। "
-                "nepali_datetime package जाँच गर।"
-            )
-    else:
-        st.info(
-            "नेपाली मिति देखाउन तलको install command चलाउनुपर्छ।"
-        )
+            st.info("नेपाली मिति देखाउन सकिएन। nepali-datetime package जाँच गर।")
 
     if jpholiday is not None:
         try:
             if jpholiday.is_holiday(today):
-                holiday_name = jpholiday.is_holiday_name(today)
-                st.success(f"🇯🇵 आज जापानमा सार्वजनिक बिदा: {holiday_name}")
-            else:
-                st.write("🇯🇵 आज जापानको सार्वजनिक बिदा होइन।")
-        except Exception:
-            st.info("जापानको बिदा जाँच गर्न सकिएन।")
-    else:
-        st.info(
-            "जापानका सार्वजनिक बिदा देखाउन jpholiday package install गर।"
-        )
-
-    st.divider()
-    st.subheader("📆 मिति छानेर हेर्ने")
-
-    selected_date = st.date_input(
-        "English date छान",
-        value=today,
-        key="calendar_selected_date"
-    )
-
-    st.write(
-        f"**छानिएको मिति:** {selected_date.strftime('%A, %Y-%m-%d')}"
-    )
-
-    if nepali_datetime is not None:
-        try:
-            bs_selected = nepali_datetime.date.from_datetime_date(
-                selected_date
-            )
-
-            st.write(
-                f"**नेपाली मिति:** "
-                f"{bs_selected.year}/{bs_selected.month}/{bs_selected.day}"
-            )
-        except Exception:
-            st.caption("यो मितिको नेपाली मिति देखाउन सकिएन।")
-
-    if jpholiday is not None:
-        try:
-            if jpholiday.is_holiday(selected_date):
                 st.success(
-                    "🇯🇵 जापानको सार्वजनिक बिदा: "
-                    + str(jpholiday.is_holiday_name(selected_date))
+                    "🇯🇵 आज जापानको सार्वजनिक बिदा: "
+                    + str(jpholiday.is_holiday_name(today))
                 )
             else:
-                st.write("🇯🇵 जापानको सार्वजनिक बिदा होइन।")
+                st.caption("🇯🇵 आज जापानको सार्वजनिक बिदा होइन।")
         except Exception:
-            pass
+            st.caption("जापानको बिदा जाँच गर्न सकिएन।")
 
+    st.divider()
+
+    # Build a real month grid. It automatically follows the selected month,
+    # including leap years and year changes.
+    month_calendar = calendar.Calendar(firstweekday=6)  # Sunday first
+    weekday_names = ["आइत", "सोम", "मंगल", "बुध", "बिही", "शुक्र", "शनि"]
+
+    header_cols = st.columns(7)
+    for col, weekday in zip(header_cols, weekday_names):
+        col.markdown(f"**{weekday}**")
+
+    for week in month_calendar.monthdatescalendar(shown_month.year, shown_month.month):
+        day_cols = st.columns(7)
+        for col, day_date in zip(day_cols, week):
+            with col:
+                if day_date.month != shown_month.month:
+                    st.caption(" ")
+                    continue
+
+                if day_date == today:
+                    st.markdown(f"**🟢 {day_date.day} · आज**")
+                else:
+                    st.markdown(f"**{day_date.day}**")
+
+                if nepali_datetime is not None:
+                    try:
+                        bs_date = nepali_datetime.date.from_datetime_date(day_date)
+                        st.caption(f"{bs_date.month}/{bs_date.day}")
+                    except Exception:
+                        pass
+
+                if jpholiday is not None:
+                    try:
+                        if jpholiday.is_holiday(day_date):
+                            holiday_name = jpholiday.is_holiday_name(day_date)
+                            st.caption(f"🇯🇵 {holiday_name or 'बिदा'}")
+                    except Exception:
+                        pass
+
+    st.divider()
     st.caption(
-        "नोट: यो संस्करणमा English date, नेपाली मिति र जापानका "
-        "सार्वजनिक बिदा देखिन्छन्। नेपाली चाडपर्वको छुट्टै सूची "
-        "अझै थपिएको छैन।"
+        "नेपाली मिति देखाउन nepali-datetime र जापानका सार्वजनिक बिदा "
+        "देखाउन jpholiday आवश्यक छ। क्यालेन्डरले महिनाको दिन र वर्ष "
+        "स्वतः गणना गर्छ, leap year सहित। नेपाली चाडपर्वको छुट्टै सूची "
+        "यस संस्करणमा छैन।"
     )
 
 
